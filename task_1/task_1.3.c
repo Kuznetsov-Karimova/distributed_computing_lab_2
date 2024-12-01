@@ -36,7 +36,6 @@ void InputMat(int *mat, int rows, int cols, int my_rank, int local_cols, MPI_Dat
         MPI_Scatterv(temp, counts, disps, *col_type, mat, local_cols * local_cols, MPI_INT, 0, MPI_COMM_WORLD);
     } else {
         MPI_Scatterv(NULL, counts, disps, *col_type, mat, local_cols * local_cols, MPI_INT, 0, MPI_COMM_WORLD);
-        printf("%d MAT: %d", my_rank, mat[1]);
     }
 }
 
@@ -59,13 +58,7 @@ void MatVecMul(int* mat, int* vec, int *res, int local_cols, int rows, int cols,
     for (int i = 0; i < local_cols; ++i) {
         for (int j = 0; j < local_cols; ++j) { 
             res[i + local_cols * (my_rank / block_in_row)] += mat[i * local_cols + j] * vec[j + local_cols * (my_rank % block_in_row)];
-           // printf("%d: Vec[%d]: %d \n", my_rank, j, vec[j]);
         }
-       // printf("%d: Res: %d %d \n", my_rank, i, res[i]);
-    }
-    printf("Rank: %d\n", my_rank);
-    for (int i = 0; i < rows; ++i) {
-        printf("Rank: %d: %d\n", my_rank, res[i]);
     }
 }
 
@@ -80,7 +73,7 @@ void PrintRes(int *vector, int rows, int my_rank, int comm_size) {
 int main() {
     int comm_size;
     int my_rank;
-
+    double start, end, duration, max_duration;
     MPI_Init(NULL, NULL);
 
     MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
@@ -96,9 +89,7 @@ int main() {
     int local_rows = rows / block_in_row;
 
     MPI_Datatype block, block_type;
-    int sizes[2] =  {rows, cols};
-    int sub_sizes[2] =  {rows / comm_size, cols / comm_size};
-    int start[2] = {0, 0};
+
     MPI_Type_vector(local_rows, local_cols, cols, MPI_INT, &block);
     MPI_Type_create_resized(block, 0, sizeof(int), &block_type);
     MPI_Type_commit(&block_type);
@@ -114,19 +105,23 @@ int main() {
     int *mat = calloc(local_cols * local_rows, sizeof(int)); 
     int *vec = calloc(cols , sizeof(int)); 
     InputVector(vec, cols, my_rank);
-  //  printf("%d, VEC_1: %d\n", my_rank, vec[0]);
-    PrintVector(vec, cols, my_rank);
-   // printf("%d, VEC_1: %d\n", my_rank, vec[0]);
+   // PrintVector(vec, cols, my_rank);
     InputMat(mat, rows, cols, my_rank, local_cols, &block_type, disps, counts);
     int *res = calloc(rows, sizeof(int)); 
     for (int i = 0; i < rows; ++i)
         res[i] = 0;
-    PrintMat(rows, cols, mat, my_rank, local_cols, &block_type, disps, counts);
-    printf("%d, VEC_2: %d\n", my_rank, vec[0]);
+   // PrintMat(rows, cols, mat, my_rank, local_cols, &block_type, disps, counts);
+    start =  MPI_Wtime();
     MatVecMul(mat, vec, res, local_cols, rows, cols, my_rank, block_in_row);
     int *res_final = calloc(rows, sizeof(int)); 
     MPI_Reduce(res, res_final, rows, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-    PrintRes(res_final, rows, my_rank, comm_size);
+  //  PrintRes(res_final, rows, my_rank, comm_size);
+
+    end =  MPI_Wtime();
+    duration = end - start;
+    MPI_Reduce(&duration, &max_duration,1,MPI_DOUBLE,MPI_MAX,0,MPI_COMM_WORLD);
+    if (my_rank == 0)
+        printf("Time: %f s\n", max_duration);
 
     MPI_Finalize();
 }

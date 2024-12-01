@@ -33,6 +33,7 @@ void InputMat(int *mat, int rows, int cols, int my_rank, int local_rows) {
         for (int i = 0; i < cols * rows; ++i)
             temp[i] = rand() % 10;
         MPI_Scatter(temp, local_rows * cols, MPI_INT, mat, local_rows * cols, MPI_INT, 0, MPI_COMM_WORLD);
+        free(temp);
     } else {
     MPI_Scatter(NULL, local_rows * cols, MPI_INT, mat, local_rows * cols, MPI_INT, 0, MPI_COMM_WORLD);
     }
@@ -77,24 +78,32 @@ void PrintRes(int *vector, int rows, int my_rank, int comm_size) {
 int main() {
     int comm_size;
     int my_rank;
+    
+    double start, end, duration, max_duration;
 
     MPI_Init(NULL, NULL);
-
     MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-
+    
     int rows, cols;
 
     InputSize(&rows, &cols, my_rank);
 
+
     int *mat = calloc(rows / comm_size * cols, sizeof(int)); 
     int *vec = calloc(cols, sizeof(int)); 
     InputVector(vec, cols, my_rank);
-    PrintVector(vec, cols, my_rank);
+   // PrintVector(vec, cols, my_rank);
     InputMat(mat, rows, cols, my_rank, rows / comm_size);
     int *res = calloc(rows, sizeof(int)); 
-    PrintMat(rows, cols, mat, my_rank, rows / comm_size);
+  //  PrintMat(rows, cols, mat, my_rank, rows / comm_size);
+    start =  MPI_Wtime();
     MatVecMul(mat, vec, res, rows / comm_size, cols);
-    PrintRes(res, rows, my_rank, comm_size);
+    end =  MPI_Wtime();
+    duration = end - start;
+    MPI_Reduce(&duration, &max_duration, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+ //   PrintRes(res, rows, my_rank, comm_size);
+    if (my_rank == 0)
+        printf("Time: %f s\n", max_duration);
     MPI_Finalize();
 }
